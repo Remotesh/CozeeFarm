@@ -1,51 +1,11 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <chrono>
 
-// Vertex Shader (GLSL 1.20)
-const char* vertexShaderSrc = R"(
-#version 120
-attribute vec3 position;
-attribute vec3 color;
-varying vec3 fragColor;
+#include "Game.h"
 
-void main()
-{
-    fragColor = color;
-    gl_Position = vec4(position, 1.0);
-}
-)";
-
-// Fragment Shader (GLSL 1.20)
-const char* fragmentShaderSrc = R"(
-#version 120
-varying vec3 fragColor;
-
-void main()
-{
-    gl_FragColor = vec4(fragColor, 1.0);
-}
-)";
-
-// Helper to compile shaders and check for errors
-GLuint compileShader(GLenum type, const char* src)
-{
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, nullptr);
-    glCompileShader(shader);
-
-    GLint status;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
-
-    if (status != GL_TRUE)
-    {
-        char buffer[512];
-        glGetShaderInfoLog(shader, 512, nullptr, buffer);
-        std::cerr << "Shader compile error:\n" << buffer << std::endl;
-    }
-
-    return shader;
-}
+#include "TestScene.h"
 
 int main()
 {
@@ -55,14 +15,13 @@ int main()
         return -1;
     }
 
-    // Request OpenGL 2.1
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "CozeeFarm - Triangle Test", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "CozeeFarm", nullptr, nullptr);
     if (!window)
     {
-        std::cerr << "Failed to create window\n";
+        std::cerr << "Failed to create GLFW window\n";
         glfwTerminate();
         return -1;
     }
@@ -70,70 +29,64 @@ int main()
     glfwMakeContextCurrent(window);
     glewExperimental = GL_TRUE;
 
+    glViewport(0, 0, 800, 600);
+
+
     if (glewInit() != GLEW_OK)
     {
-        std::cerr << "GLEW init failed\n";
+        std::cerr << "GLEW initialization failed\n";
         return -1;
     }
 
-    std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << "\n";
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
 
-    // Create and link shader program
-    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSrc);
-    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSrc);
-    GLuint shaderProgram = glCreateProgram();
 
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glUseProgram(shaderProgram);
+    // Enable VSync (optional)
+    glfwSwapInterval(1);
 
-    // Triangle vertex data
-    float vertices[] = {
-        // position       // color
-        -0.5f, -0.5f, 0,   1, 0, 0,   // Red
-         0.5f, -0.5f, 0,   0, 1, 0,   // Green
-         0.0f,  0.5f, 0,   0, 0, 1    // Blue
-    };
+    // --- Game Setup ---
+    Game game;
+    if (!game.init())
+    {
+        std::cerr << "Failed to initialize game systems\n";
+        return -1;
+    }
 
-    GLuint vbo, vao;
-    glGenBuffers(1, &vbo);
-    glGenVertexArrays(1, &vao);
+    game.getSceneManager().changeScene(std::make_unique<TestScene>());
 
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    // Timing
+    auto lastTime = std::chrono::high_resolution_clock::now();
 
-    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
-    glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(posAttrib);
-
-    GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
-    glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(colAttrib);
-
-    // Main loop
+    // --- Main Game Loop ---
     while (!glfwWindowShouldClose(window))
     {
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        // Calculate deltaTime
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float deltaTime = std::chrono::duration<float>(currentTime - lastTime).count();
+        lastTime = currentTime;
+
+        // Update game logic
+        game.update(deltaTime);
+
+        // Render scene
+        glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shaderProgram);
-        glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        game.render();
 
+        // Swap buffers and poll input
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     // Cleanup
-    glDeleteProgram(shaderProgram);
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    glDeleteBuffers(1, &vbo);
-    glDeleteVertexArrays(1, &vao);
-
+    game.shutdown();
     glfwDestroyWindow(window);
     glfwTerminate();
+
     return 0;
 }
