@@ -1,0 +1,16 @@
+cat <<EOF > .gitignore
+# Build files
+/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VSCode config
+.vscode/
+
+# Editor backups
+*~
+*.swp
+.DS_Store
+EOF
